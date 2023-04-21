@@ -45,7 +45,11 @@ func GenerateEnumCHeaderFile(info *dwarfhelper.DwarfInfo) error {
 		return err
 	}
 	for _, v := range info.GetEnumMap() {
-		_, err = create.WriteString(fmt.Sprintf("enum %s : %s {\n", dwarfhelper.GetEnumName(v.EnumType), v.Base))
+		if v.EnumClass {
+			_, err = create.WriteString(fmt.Sprintf("enum %s : %s {\n", dwarfhelper.GetEnumName(v.EnumType), v.Base))
+		} else {
+			_, err = create.WriteString(fmt.Sprintf("enum class %s : %s {\n", dwarfhelper.GetEnumName(v.EnumType), v.Base))
+		}
 		if err != nil {
 			return err
 		}
