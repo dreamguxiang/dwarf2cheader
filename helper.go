@@ -15,9 +15,6 @@ func DwarfHelper(ipath string) error {
 	}
 	reader := info.GetData().Reader()
 
-	//log, _ := os.Create("log.log")
-	//defer log.Close()
-	//存入临时偏移变量
 	for {
 		entry, err := reader.Next()
 		if err != nil {
@@ -26,11 +23,16 @@ func DwarfHelper(ipath string) error {
 		if entry == nil {
 			break
 		}
-		if entry.Tag == dwarf.TagNamespace ||
-			entry.Tag == dwarf.TagClassType ||
+		if entry.Tag == dwarf.TagClassType ||
 			entry.Tag == dwarf.TagStructType ||
 			entry.Tag == dwarf.TagEnumerationType ||
-			entry.Tag == dwarf.TagBaseType {
+			entry.Tag == dwarf.TagBaseType ||
+			entry.Tag == dwarf.TagPointerType ||
+			entry.Tag == dwarf.TagTypedef ||
+			entry.Tag == dwarf.TagConstType ||
+			entry.Tag == dwarf.TagNamespace ||
+			entry.Tag == dwarf.TagReferenceType ||
+			entry.Tag == dwarf.TagArrayType {
 			info.Offset2entry[entry.Offset] = entry
 		}
 	}
@@ -117,10 +119,9 @@ func GenerateUdtCHeaderFile(info *dwarfhelper.DwarfInfo) error {
 	if err != nil {
 		return err
 	}
-	//过滤 std:: 标准库
-	//新建一个过滤切片
+
 	filter := make([]string, 0)
-	filter = append(filter, "std::", "__gnu_cxx")
+	filter = append(filter, "std::", "__gnu_cxx", "__aligned_buffer", "_Multi_array", "__shared_ptr_access", "__result_of_success", "_Tuple_impl")
 	for k, v := range info.GetUDTMap() {
 		for _, v1 := range filter {
 			if strings.Contains(k, v1) {
@@ -129,15 +130,24 @@ func GenerateUdtCHeaderFile(info *dwarfhelper.DwarfInfo) error {
 		}
 		_, err = create.WriteString(fmt.Sprintf("//size: \n"))
 		if v.StructType.Kind == "struct" {
-			_, err = create.WriteString(fmt.Sprintf("struct %s {\n", k))
+			if v.Containing == "" {
+				_, err = create.WriteString(fmt.Sprintf("struct %s {\n", k))
+			} else {
+				_, err = create.WriteString(fmt.Sprintf("struct %s : %s {\n", k, v.Containing))
+			}
 		} else {
-			_, err = create.WriteString(fmt.Sprintf("class %s {\n", k))
+			if v.Containing == "" {
+				_, err = create.WriteString(fmt.Sprintf("class %s {\n", k))
+			} else {
+				_, err = create.WriteString(fmt.Sprintf("class %s : %s {\n", k, v.Containing))
+			}
+
 		}
 		if err != nil {
 			return err
 		}
 		for _, v1 := range v.ExStructField {
-			_, err = create.WriteString(fmt.Sprintf("\t%s %s; // %d\n", v1.Entry.Val(dwarf.AttrName), v1.Name, v1.ByteOffset))
+			_, err = create.WriteString(fmt.Sprintf("\t%s %s; // %d\n", v1.Entry.TypeName, v1.Name, v1.ByteOffset))
 			if err != nil {
 				return err
 			}
