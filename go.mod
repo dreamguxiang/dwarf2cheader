@@ -3,8 +3,6 @@ module dwarf2cheader
 go 1.20
 
 require (
-	github.com/deckarep/golang-set v1.8.0
-	github.com/go-delve/delve v1.20.2
 	github.com/urfave/cli/v2 v2.25.1
 )
 

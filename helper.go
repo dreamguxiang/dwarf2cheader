@@ -54,7 +54,24 @@ func GenerateEnumCHeaderFile(info *dwarfhelper.DwarfInfo) error {
 			return err
 		}
 		for _, v1 := range v.EnumType.Val {
-			_, err = create.WriteString(fmt.Sprintf("	%s = 0x%d,\n", v1.Name, v1.Val))
+			switch v.Base {
+			case "__uint8":
+				fallthrough
+			case "__int8":
+				_, err = create.WriteString(fmt.Sprintf("\t%s = 0x%X\n", v1.Name, uint8(v1.Val)))
+			case "__uint16":
+				fallthrough
+			case "__int16":
+				_, err = create.WriteString(fmt.Sprintf("\t%s = 0x%X,\n", v1.Name, uint16(v1.Val)))
+			case "__uint32":
+				fallthrough
+			case "__int32":
+				_, err = create.WriteString(fmt.Sprintf("\t%s = 0x%X,\n", v1.Name, uint32(v1.Val)))
+			case "__uint64":
+				fallthrough
+			case "__int64":
+				_, err = create.WriteString(fmt.Sprintf("\t%s = 0x%X,\n", v1.Name, uint64(v1.Val)))
+			}
 			if err != nil {
 				return err
 			}
