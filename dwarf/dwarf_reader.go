@@ -5,37 +5,54 @@ import (
 	"fmt"
 )
 
+func (_this *DwarfInfo) getEnumTypeName(entry *dwarf.Entry) string {
+	if entry.Val(dwarf.AttrType) != nil {
+		offset, _ := entry.Val(dwarf.AttrType).(dwarf.Offset)
+		entryoff, _ := _this.getEntryByOffset(offset)
+		if entryoff == nil {
+			return "unknown"
+		}
+		return _this.getEnumTypeName(entryoff)
+	} else {
+		if entry.Val(dwarf.AttrName) != nil {
+			return entry.Val(dwarf.AttrName).(string)
+		} else {
+			return "unknown"
+		}
+	}
+}
+
 func (_this *DwarfInfo) getTypeName(entry *dwarf.Entry, isConst bool) string {
-	var name string
-	if entry.Val(dwarf.AttrName) != nil {
-		name = entry.Val(dwarf.AttrName).(string)
+	var result string
+	if isConst {
+		result += "const "
 	}
 	switch entry.Tag {
 	case dwarf.TagConstType:
 		isConst = true
-	case dwarf.TagEnumerationType, dwarf.TagTypedef:
-		if name != "" {
-			return name
+	case dwarf.TagEnumerationType:
+		if entry.Val(dwarf.AttrName) != nil {
+			return result + entry.Val(dwarf.AttrName).(string)
+		}
+	case dwarf.TagTypedef:
+		if entry.Val(dwarf.AttrName) != nil {
+			return result + entry.Val(dwarf.AttrName).(string)
 		}
 	}
 	if entry.Val(dwarf.AttrType) != nil {
-		offset, ok := entry.Val(dwarf.AttrType).(dwarf.Offset)
-		if !ok {
+		offset, _ := entry.Val(dwarf.AttrType).(dwarf.Offset)
+		entryoff, _ := _this.getEntryByOffset(offset)
+		if entryoff == nil {
 			return "void**"
 		}
-		subEntry, err := _this.getEntryByOffset(offset)
-		if err != nil {
-			return "void**"
+		return _this.getTypeName(entryoff, isConst)
+	} else {
+		if entry.Val(dwarf.AttrName) != nil {
+			return result + entry.Val(dwarf.AttrName).(string)
+		} else {
+			return ""
 		}
-		return _this.getTypeName(subEntry, isConst)
 	}
-	if name == "" {
-		return ""
-	}
-	if isConst {
-		return "const " + name
-	}
-	return name
 }
 
 func (_this *DwarfInfo) hasDataMemberLoc(entry *dwarf.Entry) bool {

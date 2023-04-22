@@ -4,7 +4,6 @@ import (
 	"crypto/sha1"
 	"debug/dwarf"
 	"debug/elf"
-	"dwarf2cheader/utils"
 	"fmt"
 )
 
@@ -123,14 +122,7 @@ func (_this *DwarfInfo) GetType(entry *dwarf.Entry, reader *dwarf.Reader) error 
 			if tempEnum.Size < 0 {
 				tempEnum.Size = 0
 			}
-
-			isSigned := false
-			for _, v := range enumType.Val {
-				if v.Val < 0 {
-					isSigned = true
-				}
-			}
-			tempEnum.Base = utils.GetEnumType(tempEnum.Size, isSigned)
+			tempEnum.Base = _this.getEnumTypeName(entry)
 			_this.enumMap[GetEnumName(*enumType)] = tempEnum
 		}
 	case dwarf.TagClassType, dwarf.TagStructType:
