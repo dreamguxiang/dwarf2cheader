@@ -16,34 +16,6 @@ type DwarfInfo struct {
 	Offset2entry map[dwarf.Offset]*dwarf.Entry
 }
 
-type typeEnum struct {
-	Size      int64
-	Base      string
-	EnumClass bool
-	EnumType  dwarf.EnumType
-}
-
-type typeUDT struct {
-	Size          int64
-	StructType    dwarf.StructType
-	ExStructField []*vStructField
-	Containing    string
-}
-
-type vEntry struct {
-	TypeName string
-}
-
-type vStructField struct {
-	Name          string
-	Entry         vEntry
-	ByteOffset    int64
-	ByteSize      int64 // usually zero; use Type.Size() for normal fields
-	BitOffset     int64
-	DataBitOffset int64
-	BitSize       int64 // zero if not a bit field
-}
-
 func NewDwarfInfo(input string) (*DwarfInfo, error) {
 	elfFile, err := elf.Open(input)
 	if err != nil {
@@ -61,71 +33,6 @@ func NewDwarfInfo(input string) (*DwarfInfo, error) {
 		udtMap:       make(map[string]typeUDT),
 		Offset2entry: make(map[dwarf.Offset]*dwarf.Entry),
 	}, nil
-}
-
-func (_this *DwarfInfo) isEnum(name string) bool {
-	_, ok := _this.enumMap[name]
-	return ok
-}
-
-// 获取最底层的类型名
-func (_this *DwarfInfo) getTypeName(entry *dwarf.Entry, isConst bool) string {
-	switch entry.Tag {
-	case dwarf.TagConstType:
-		isConst = true
-	case dwarf.TagEnumerationType:
-		if entry.Val(dwarf.AttrName) != nil {
-			return entry.Val(dwarf.AttrName).(string)
-		}
-	case dwarf.TagTypedef:
-		if entry.Val(dwarf.AttrName) != nil {
-			return entry.Val(dwarf.AttrName).(string)
-		}
-	}
-	if entry.Val(dwarf.AttrType) != nil {
-		offset, _ := entry.Val(dwarf.AttrType).(dwarf.Offset)
-		entry, _ := _this.getEntryByOffset(offset)
-		if entry == nil {
-			return "void**"
-		}
-		return _this.getTypeName(entry, isConst)
-	} else {
-		if entry.Val(dwarf.AttrName) != nil {
-			if isConst {
-				return "const " + entry.Val(dwarf.AttrName).(string)
-			} else {
-				return entry.Val(dwarf.AttrName).(string)
-			}
-		} else {
-			return ""
-		}
-	}
-}
-
-// 判断是否含有DataMemberLoc
-func (_this *DwarfInfo) hasDataMemberLoc(entry *dwarf.Entry) bool {
-	if entry.Val(dwarf.AttrDataMemberLoc) != nil {
-		return true
-	} else {
-		return false
-	}
-}
-
-// 是否包含AttrContainingType
-func (_this *DwarfInfo) hasContainingType(entry *dwarf.Entry) bool {
-	if entry.Val(dwarf.AttrContainingType) != nil {
-		return true
-	} else {
-		return false
-	}
-}
-
-func (_this *DwarfInfo) getEntryByOffset(offset dwarf.Offset) (*dwarf.Entry, error) {
-	entry, ok := _this.Offset2entry[offset]
-	if !ok {
-		return nil, fmt.Errorf("offset %d not found", offset)
-	}
-	return entry, nil
 }
 
 func (_this *DwarfInfo) GetData() *dwarf.Data {
@@ -294,12 +201,9 @@ func (_this *DwarfInfo) GetType(entry *dwarf.Entry, reader *dwarf.Reader) error 
 				}
 			}
 			UDT.StructType = *t
-			//过滤掉没结构体，无继承的空函数
 			if len(UDT.ExStructField) == 0 && UDT.Containing == "" {
 				return nil
 			}
-
-			// 如果不存在，就添加，如果存在，判断ExStructField是否为空，如果为空，就添加
 			if _, ok := _this.udtMap[t.StructName]; !ok {
 				_this.udtMap[t.StructName] = UDT
 			} else {
