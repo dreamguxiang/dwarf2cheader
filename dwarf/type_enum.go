@@ -1,6 +1,8 @@
 package dwarfhelper
 
-import "debug/dwarf"
+import (
+	"debug/dwarf"
+)
 
 type typeEnum struct {
 	Size      int64

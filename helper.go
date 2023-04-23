@@ -69,11 +69,11 @@ func GenerateEnumCHeaderFile(info *dwarfhelper.DwarfInfo) error {
 	if err != nil {
 		return err
 	}
-	for _, v := range info.GetEnumMap() {
+	for k, v := range info.GetEnumMap() {
 		if v.EnumClass {
-			_, err = create.WriteString(fmt.Sprintf("enum class %s : %s {\n", dwarfhelper.GetEnumName(v.EnumType), v.Base))
+			_, err = create.WriteString(fmt.Sprintf("enum class %s : %s {\n", k, v.Base))
 		} else {
-			_, err = create.WriteString(fmt.Sprintf("enum %s : %s {\n", dwarfhelper.GetEnumName(v.EnumType), v.Base))
+			_, err = create.WriteString(fmt.Sprintf("enum %s : %s {\n", k, v.Base))
 		}
 		if err != nil {
 			return err
@@ -136,16 +136,32 @@ func GenerateUdtCHeaderFile(info *dwarfhelper.DwarfInfo) error {
 		}
 		_, err = create.WriteString(fmt.Sprintf("//size: \n"))
 		if v.StructType.Kind == "struct" {
-			if v.Containing == "" {
+			if len(v.Base) == 0 {
 				_, err = create.WriteString(fmt.Sprintf("struct %s {\n", k))
 			} else {
-				_, err = create.WriteString(fmt.Sprintf("struct %s : %s {\n", k, v.Containing))
+				var t string
+				for k2, v2 := range v.Base {
+					if k2 == len(v.Base)-1 {
+						t += v2.TypeName
+					} else {
+						t += v2.TypeName + ","
+					}
+				}
+				_, err = create.WriteString(fmt.Sprintf("struct %s : %s {\n", k, t))
 			}
 		} else {
-			if v.Containing == "" {
+			if len(v.Base) == 0 {
 				_, err = create.WriteString(fmt.Sprintf("class %s {\n", k))
 			} else {
-				_, err = create.WriteString(fmt.Sprintf("class %s : %s {\n", k, v.Containing))
+				var t string
+				for k2, v2 := range v.Base {
+					if k2 == len(v.Base)-1 {
+						t += v2.TypeName
+					} else {
+						t += v2.TypeName + ","
+					}
+				}
+				_, err = create.WriteString(fmt.Sprintf("class %s : %s {\n", k, t))
 			}
 
 		}

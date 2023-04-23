@@ -6,7 +6,7 @@ type typeUDT struct {
 	Size          int64
 	StructType    dwarf.StructType
 	ExStructField []*vStructField
-	Containing    string
+	Base          []vEntry
 }
 
 type vEntry struct {

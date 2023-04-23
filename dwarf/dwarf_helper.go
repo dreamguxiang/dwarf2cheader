@@ -5,6 +5,7 @@ import (
 	"debug/dwarf"
 	"debug/elf"
 	"fmt"
+	"github.com/go-delve/delve/pkg/dwarf/godwarf"
 )
 
 type DwarfInfo struct {
@@ -12,6 +13,7 @@ type DwarfInfo struct {
 	data         *dwarf.Data
 	enumMap      map[string]typeEnum
 	udtMap       map[string]typeUDT
+	typeCache    map[dwarf.Offset]godwarf.Type
 	Offset2entry map[dwarf.Offset]*dwarf.Entry
 }
 
@@ -20,6 +22,9 @@ func NewDwarfInfo(input string) (*DwarfInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	//rtti.ReadRttiSymbols(*elfFile)
+
 	dwarfOut, err := elfFile.DWARF()
 	if err != nil {
 		return nil, err
@@ -30,6 +35,7 @@ func NewDwarfInfo(input string) (*DwarfInfo, error) {
 		data:         dwarfOut,
 		enumMap:      make(map[string]typeEnum),
 		udtMap:       make(map[string]typeUDT),
+		typeCache:    make(map[dwarf.Offset]godwarf.Type),
 		Offset2entry: make(map[dwarf.Offset]*dwarf.Entry),
 	}, nil
 }
@@ -50,6 +56,7 @@ func GetEnumName(dwarfEnum dwarf.EnumType) string {
 	if dwarfEnum.EnumName != "" {
 		return dwarfEnum.EnumName
 	}
+
 	data := sha1.Sum([]byte(dwarfEnum.String()))
 	return fmt.Sprintf("$%8x", data[0:8])
 }
@@ -92,6 +99,16 @@ func (_this *DwarfInfo) GetType(entry *dwarf.Entry, reader *dwarf.Reader) error 
 	switch entry.Tag {
 	case dwarf.TagEnumerationType:
 		{
+			out, err := _this.getBeforeByOffset(entry.Offset)
+			var baseName string
+			if err == nil {
+				if out.Tag == dwarf.TagClassType || out.Tag == dwarf.TagStructType || out.Tag == dwarf.TagNamespace {
+					if out.Val(dwarf.AttrName) != nil {
+						baseName = out.Val(dwarf.AttrName).(string)
+					}
+				}
+			}
+
 			enumType := new(dwarf.EnumType)
 			enumType.EnumName, _ = entry.Val(dwarf.AttrName).(string)
 			enumClass, _ := entry.Val(dwarf.AttrEnumClass).(bool)
@@ -123,7 +140,12 @@ func (_this *DwarfInfo) GetType(entry *dwarf.Entry, reader *dwarf.Reader) error 
 				tempEnum.Size = 0
 			}
 			tempEnum.Base = _this.getEnumTypeName(entry)
-			_this.enumMap[GetEnumName(*enumType)] = tempEnum
+			if baseName == "" {
+				_this.enumMap[GetEnumName(*enumType)] = tempEnum
+			} else {
+				_this.enumMap[baseName+"::"+GetEnumName(*enumType)] = tempEnum
+			}
+
 		}
 	case dwarf.TagClassType, dwarf.TagStructType:
 		{
@@ -139,18 +161,42 @@ func (_this *DwarfInfo) GetType(entry *dwarf.Entry, reader *dwarf.Reader) error 
 			UDT := typeUDT{
 				Size: t.ByteSize,
 			}
+
 			//继承关系
-			if _this.hasContainingType(entry) {
-				contaoff := entry.Val(dwarf.AttrContainingType)
-				if contaoff != nil {
-					if offset, ok := contaoff.(dwarf.Offset); ok {
-						offsetout, _ := _this.getEntryByOffset(offset)
-						UDT.Containing = offsetout.Val(dwarf.AttrName).(string)
-					}
-				}
-			}
+			//if _this.hasContainingType(entry) {
+			//	contaoff := entry.Val(dwarf.AttrContainingType)
+			//	if contaoff != nil {
+			//		if offset, ok := contaoff.(dwarf.Offset); ok {
+			//			offsetout, _ := _this.getEntryByOffset(offset)
+			//			UDT.Containing = offsetout.Val(dwarf.AttrName).(string)
+			//		}
+			//	}
+			//}
 
 			for kid := next(); kid != nil; kid = next() {
+				if kid.Tag == dwarf.TagInheritance {
+					if !_this.hasDataMemberLoc(kid) {
+						continue
+					}
+					off := kid.Val(dwarf.AttrType)
+					if off != nil {
+						if offset, ok := off.(dwarf.Offset); ok {
+							offsetout, err := _this.getEntryByOffset(offset)
+							var temp vEntry
+							if err != nil {
+								temp = vEntry{
+									TypeName: "NoSupport",
+								}
+							} else {
+								temp = vEntry{
+									TypeName: _this.getTypeName(offsetout, false),
+								}
+							}
+							UDT.Base = append(UDT.Base, temp)
+						}
+					}
+				}
+
 				if kid.Tag == dwarf.TagMember {
 					if !_this.hasDataMemberLoc(kid) {
 						continue
@@ -193,9 +239,10 @@ func (_this *DwarfInfo) GetType(entry *dwarf.Entry, reader *dwarf.Reader) error 
 				}
 			}
 			UDT.StructType = *t
-			if len(UDT.ExStructField) == 0 && UDT.Containing == "" {
+			if len(UDT.ExStructField) == 0 && len(UDT.Base) == 0 {
 				return nil
 			}
+
 			if _, ok := _this.udtMap[t.StructName]; !ok {
 				_this.udtMap[t.StructName] = UDT
 			} else {
@@ -203,7 +250,6 @@ func (_this *DwarfInfo) GetType(entry *dwarf.Entry, reader *dwarf.Reader) error 
 					_this.udtMap[t.StructName] = UDT
 				}
 			}
-
 		}
 	}
 	return nil
