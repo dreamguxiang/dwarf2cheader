@@ -6,6 +6,7 @@ import (
 	"debug/elf"
 	"fmt"
 	"github.com/go-delve/delve/pkg/dwarf/godwarf"
+	"strings"
 )
 
 type DwarfInfo struct {
@@ -79,8 +80,11 @@ func (_this *DwarfInfo) GetType(entry *dwarf.Entry, reader *dwarf.Reader, sty st
 			if kid == nil {
 				return nil
 			}
-			
-			if kid.Children && kid.Tag == dwarf.TagEnumerationType {
+
+			if kid.Children && (kid.Tag == dwarf.TagEnumerationType || kid.Tag == dwarf.TagClassType || kid.Tag == dwarf.TagStructType) {
+				if sty == "npc" {
+					fmt.Println(kid)
+				}
 				_this.GetType(kid, reader, sty)
 				return nil
 			}
@@ -157,11 +161,20 @@ func (_this *DwarfInfo) GetType(entry *dwarf.Entry, reader *dwarf.Reader, sty st
 				Size: t.ByteSize,
 			}
 
-			for kid := next(t.StructName); kid != nil; kid = next(t.StructName) {
+			var tempstr string
+
+			if sty == "" {
+				tempstr = t.StructName
+			} else {
+				if strings.Count(sty, "::") == 1 {
+					tempstr = sty + t.StructName
+				} else {
+					tempstr = sty + "::" + t.StructName
+				}
+			}
+
+			for kid := next(tempstr); kid != nil; kid = next(tempstr) {
 				if kid.Tag == dwarf.TagInheritance {
-					if !_this.hasDataMemberLoc(kid) {
-						continue
-					}
 					off := kid.Val(dwarf.AttrType)
 					if off != nil {
 						if offset, ok := off.(dwarf.Offset); ok {
@@ -223,27 +236,28 @@ func (_this *DwarfInfo) GetType(entry *dwarf.Entry, reader *dwarf.Reader, sty st
 				}
 			}
 			UDT.StructType = *t
+
 			if len(UDT.ExStructField) == 0 && len(UDT.Base) == 0 {
 				return nil
 			}
 
-			if _, ok := _this.udtMap[t.StructName]; !ok {
-				_this.udtMap[t.StructName] = UDT
+			if sty == "npc" {
+				fmt.Println(tempstr)
+			}
+
+			if _, ok := _this.udtMap[tempstr]; !ok {
+				_this.udtMap[tempstr] = UDT
 			} else {
-				if len(_this.udtMap[t.StructName].ExStructField) == 0 {
-					_this.udtMap[t.StructName] = UDT
+				if len(_this.udtMap[tempstr].ExStructField) != 0 {
+					_this.udtMap[tempstr] = UDT
 				}
 			}
 		}
 	case dwarf.TagNamespace:
 		{
 			name, _ := entry.Val(dwarf.AttrName).(string)
-			kidd, err := reader.Next()
-			if err != nil || kidd == nil {
-				break
-			}
-			if kidd.Children && kidd.Tag == dwarf.TagEnumerationType {
-				_this.GetType(kidd, reader, name)
+			for kid := next(name); kid != nil; kid = next(name) {
+
 			}
 		}
 	}
