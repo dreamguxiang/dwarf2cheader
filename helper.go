@@ -43,7 +43,7 @@ func DwarfHelper(ipath string) error {
 			fmt.Println("finish")
 			break
 		}
-		err = info.GetType(entry, reader)
+		err = info.GetType(entry, reader, "")
 		if err != nil {
 			break
 		}
@@ -75,9 +75,6 @@ func GenerateEnumCHeaderFile(info *dwarfhelper.DwarfInfo) error {
 		} else {
 			_, err = create.WriteString(fmt.Sprintf("enum %s : %s {\n", k, v.Base))
 		}
-		if err != nil {
-			return err
-		}
 		for _, v1 := range v.EnumType.Val {
 			switch v.Base {
 			case "unsigned char":
@@ -102,9 +99,6 @@ func GenerateEnumCHeaderFile(info *dwarfhelper.DwarfInfo) error {
 				_, err = create.WriteString(fmt.Sprintf("\t%s = 0x%X,\n", v1.Name, uint64(v1.Val)))
 			default:
 				_, err = create.WriteString(fmt.Sprintf("\t%s = 0x%X,\n", v1.Name, v1.Val))
-			}
-			if err != nil {
-				return err
 			}
 		}
 		_, err = create.WriteString(fmt.Sprintf("};\n\n"))

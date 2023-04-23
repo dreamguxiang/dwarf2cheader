@@ -80,11 +80,11 @@ func (_this *DwarfInfo) getEntryByOffset(offset dwarf.Offset) (*dwarf.Entry, err
 }
 
 func (_this *DwarfInfo) getBeforeByOffset(offset dwarf.Offset) (*dwarf.Entry, error) {
-	for i := 1; i < 8; i++ {
+	for i := 1; i < 6; i++ {
 		offset -= 1
 		entry, ok := _this.Offset2entry[offset]
 		if ok {
-			fmt.Println(entry)
+			//fmt.Println(entry)
 			return entry, nil
 		}
 	}

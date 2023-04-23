@@ -61,13 +61,13 @@ func GetEnumName(dwarfEnum dwarf.EnumType) string {
 	return fmt.Sprintf("$%8x", data[0:8])
 }
 
-func (_this *DwarfInfo) GetType(entry *dwarf.Entry, reader *dwarf.Reader) error {
+func (_this *DwarfInfo) GetType(entry *dwarf.Entry, reader *dwarf.Reader, sty string) error {
 	if entry == nil {
 		return fmt.Errorf("entry is nil")
 	}
 	nextDepth := 0
 
-	next := func() *dwarf.Entry {
+	next := func(sty string) *dwarf.Entry {
 		if !entry.Children {
 			return nil
 		}
@@ -79,6 +79,12 @@ func (_this *DwarfInfo) GetType(entry *dwarf.Entry, reader *dwarf.Reader) error 
 			if kid == nil {
 				return nil
 			}
+			
+			if kid.Children && kid.Tag == dwarf.TagEnumerationType {
+				_this.GetType(kid, reader, sty)
+				return nil
+			}
+
 			if kid.Tag == 0 {
 				if nextDepth > 0 {
 					nextDepth--
@@ -99,21 +105,11 @@ func (_this *DwarfInfo) GetType(entry *dwarf.Entry, reader *dwarf.Reader) error 
 	switch entry.Tag {
 	case dwarf.TagEnumerationType:
 		{
-			out, err := _this.getBeforeByOffset(entry.Offset)
-			var baseName string
-			if err == nil {
-				if out.Tag == dwarf.TagClassType || out.Tag == dwarf.TagStructType || out.Tag == dwarf.TagNamespace {
-					if out.Val(dwarf.AttrName) != nil {
-						baseName = out.Val(dwarf.AttrName).(string)
-					}
-				}
-			}
-
 			enumType := new(dwarf.EnumType)
 			enumType.EnumName, _ = entry.Val(dwarf.AttrName).(string)
 			enumClass, _ := entry.Val(dwarf.AttrEnumClass).(bool)
 			enumType.Val = make([]*dwarf.EnumValue, 0, 8)
-			for kid := next(); kid != nil; kid = next() {
+			for kid := next(""); kid != nil; kid = next("") {
 				if kid.Tag == dwarf.TagEnumerator {
 					f := new(dwarf.EnumValue)
 					f.Name, _ = kid.Val(dwarf.AttrName).(string)
@@ -140,12 +136,11 @@ func (_this *DwarfInfo) GetType(entry *dwarf.Entry, reader *dwarf.Reader) error 
 				tempEnum.Size = 0
 			}
 			tempEnum.Base = _this.getEnumTypeName(entry)
-			if baseName == "" {
+			if sty == "" {
 				_this.enumMap[GetEnumName(*enumType)] = tempEnum
 			} else {
-				_this.enumMap[baseName+"::"+GetEnumName(*enumType)] = tempEnum
+				_this.enumMap[sty+"::"+GetEnumName(*enumType)] = tempEnum
 			}
-
 		}
 	case dwarf.TagClassType, dwarf.TagStructType:
 		{
@@ -162,18 +157,7 @@ func (_this *DwarfInfo) GetType(entry *dwarf.Entry, reader *dwarf.Reader) error 
 				Size: t.ByteSize,
 			}
 
-			//继承关系
-			//if _this.hasContainingType(entry) {
-			//	contaoff := entry.Val(dwarf.AttrContainingType)
-			//	if contaoff != nil {
-			//		if offset, ok := contaoff.(dwarf.Offset); ok {
-			//			offsetout, _ := _this.getEntryByOffset(offset)
-			//			UDT.Containing = offsetout.Val(dwarf.AttrName).(string)
-			//		}
-			//	}
-			//}
-
-			for kid := next(); kid != nil; kid = next() {
+			for kid := next(t.StructName); kid != nil; kid = next(t.StructName) {
 				if kid.Tag == dwarf.TagInheritance {
 					if !_this.hasDataMemberLoc(kid) {
 						continue
@@ -249,6 +233,17 @@ func (_this *DwarfInfo) GetType(entry *dwarf.Entry, reader *dwarf.Reader) error 
 				if len(_this.udtMap[t.StructName].ExStructField) == 0 {
 					_this.udtMap[t.StructName] = UDT
 				}
+			}
+		}
+	case dwarf.TagNamespace:
+		{
+			name, _ := entry.Val(dwarf.AttrName).(string)
+			kidd, err := reader.Next()
+			if err != nil || kidd == nil {
+				break
+			}
+			if kidd.Children && kidd.Tag == dwarf.TagEnumerationType {
+				_this.GetType(kidd, reader, name)
 			}
 		}
 	}
